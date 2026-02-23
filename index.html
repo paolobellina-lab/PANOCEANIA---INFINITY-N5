@@ -4,20 +4,36 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PANOCEANIA MIL-SPEC TERMINAL</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#001a33">
+
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        body { background: #001a33; color: #00d2ff; font-family: 'Orbitron', sans-serif; padding: 15px; }
-        h2 { border-bottom: 2px solid #00d2ff; text-align: center; }
-        .section { background: rgba(0, 210, 255, 0.1); border: 1px solid #00d2ff; padding: 15px; border-radius: 10px; backdrop-filter: blur(5px); }
-        input { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid #00d2ff; width: 100%; padding: 12px; margin: 8px 0; border-radius: 5px; }
-        button { width: 100%; padding: 15px; border-radius: 5px; font-family: inherit; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        body { 
+            background: #001a33; 
+            color: #00d2ff; 
+            font-family: 'Orbitron', sans-serif; 
+            padding: 15px; 
+            border: 1px solid #00d2ff;
+            min-height: 100vh;
+            margin: 0;
+            box-sizing: border-box;
+        }
+        h2 { border-bottom: 2px solid #00d2ff; text-align: center; text-transform: uppercase; padding-bottom: 10px; }
+        .section { background: rgba(0, 210, 255, 0.1); border: 1px solid #00d2ff; padding: 15px; border-radius: 10px; margin-bottom: 20px; backdrop-filter: blur(5px); }
+        input { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid #00d2ff; width: 100%; padding: 12px; margin: 8px 0; border-radius: 5px; font-family: inherit; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; border-radius: 5px; font-family: inherit; font-weight: bold; cursor: pointer; transition: 0.3s; text-transform: uppercase; }
         .btn-pano { background: #00d2ff; color: #001a33; border: none; box-shadow: 0 0 10px #00d2ff; }
-        .btn-status { background: transparent; color: #00d2ff; border: 1px solid #00d2ff; margin-top: 10px; }
-        .recording { background: #ff3366 !important; box-shadow: 0 0 20px #ff3366; color: white; }
+        .btn-status { background: transparent; color: #00d2ff; border: 1px solid #00d2ff; margin-top: 10px; font-size: 12px; }
+        .recording { background: #ff3366 !important; box-shadow: 0 0 20px #ff3366; color: white; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        #log { font-size: 11px; margin-top: 20px; background: rgba(0,0,0,0.3); padding: 10px; border: 1px solid #00d2ff; border-radius: 5px; }
     </style>
 </head>
 <body>
     <h2>NEOTERRA HUB v21</h2>
+    
     <div id="setup">
         <div class="section">
             <input type="text" id="unitAlias" placeholder="CODICE (es. ALFA)">
@@ -31,53 +47,85 @@
 
     <div id="battle" style="display:none;">
         <button id="btnListen" class="btn-pano">🎤 ORDINE VOCALE</button>
-        <div id="log" style="font-size: 11px; margin-top: 20px;">SISTEMA PRONTO ALL'AGGANCIO...</div>
+        <div id="log">SISTEMA PRONTO ALL'AGGANCIO...</div>
     </div>
 
     <script type="module">
-        // --- FUNZIONE SEMPRE ACCESO (WAKE LOCK) ---
-let wakeLock = null;
-const requestWakeLock = async () => {
-  try {
-    wakeLock = await navigator.wakeLock.request('screen');
-    console.log('Schermo bloccato: SEMPRE ACCESO');
-  } catch (err) {
-    console.error(`${err.name}, ${err.message}`);
-  }
-};
-requestWakeLock();
+        // --- 1. REGISTRAZIONE SERVICE WORKER (Per installazione PWA) ---
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('SW Panoceania Registrato!', reg))
+                .catch(err => console.log('Errore SW:', err));
+        }
 
-// --- FORZA SCHERMO INTERO AL TOCCO ---
-document.addEventListener('click', () => {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen();
-    }
-});
+        // --- 2. WAKE LOCK (Schermo sempre acceso) ---
+        let wakeLock = null;
+        const requestWakeLock = async () => {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                }
+            } catch (err) {
+                console.error(`WakeLock Error: ${err.message}`);
+            }
+        };
+
+        // --- 3. FULLSCREEN E WAKE LOCK AL TOCCO ---
+        document.addEventListener('click', () => {
+            requestWakeLock();
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            }
+        });
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getFirestore, doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-        const firebaseConfig = { /* STESSO CONFIG DI PRIMA */ };
+        // CONFIGURAZIONE FIREBASE (Usa la stessa del file Nomads)
+        const firebaseConfig = { 
+            apiKey: "IL_TUO_API_KEY",
+            projectId: "IL_TUO_PROGETTO",
+            // ... incollalo qui
+        };
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
         let roster = [];
         window.addUnit = async () => {
             const alias = document.getElementById('unitAlias').value.toUpperCase();
-            const unit = { alias, name: document.getElementById('unitName').value, weapon: document.getElementById('unitWeapon').value, bs: document.getElementById('unitBS').value, state: "ACTIVE", player: "G_PANO", modifiers: [] };
+            if(!alias) return;
+            
+            const unit = { 
+                alias, 
+                name: document.getElementById('unitName').value, 
+                weapon: document.getElementById('unitWeapon').value, 
+                bs: document.getElementById('unitBS').value, 
+                state: "ACTIVE", 
+                player: "G_PANO", 
+                modifiers: [] 
+            };
+            
             await setDoc(doc(db, "sessione_corrente", alias), unit);
             roster.push(unit);
-            alert("Puntamento Agganciato!");
+            alert("Unità registrata nei database di Neoterra.");
         };
 
-        window.startBattle = () => { document.getElementById('setup').style.display='none'; document.getElementById('battle').style.display='block'; };
+        window.startBattle = () => { 
+            document.getElementById('setup').style.display='none'; 
+            document.getElementById('battle').style.display='block'; 
+        };
 
+        // --- RICONOSCIMENTO VOCALE ---
         const recognition = new (window.webkitSpeechRecognition || window.SpeechRecognition)();
         recognition.lang = 'it-IT';
+
         document.getElementById('btnListen').onclick = () => recognition.start();
 
+        recognition.onstart = () => document.getElementById('btnListen').classList.add('recording');
         recognition.onresult = async (event) => {
+            document.getElementById('btnListen').classList.remove('recording');
             const testo = event.results[0][0].transcript.toLowerCase();
-            document.getElementById('log').innerText = "CMD: " + testo;
+            document.getElementById('log').innerText = "CMD Ricevuto: " + testo;
             elaboraStato(testo);
         };
 
@@ -85,10 +133,14 @@ document.addEventListener('click', () => {
             const match = roster.find(u => testo.includes(u.alias.toLowerCase()));
             if (match) {
                 let s = "";
-                if (testo.includes("morto")) s = "DEAD";
+                if (testo.includes("morto") || testo.includes("eliminato")) s = "DEAD";
                 if (testo.includes("inconscio")) s = "UNCONSCIOUS";
-                if (testo.includes("rianimato")) s = "ACTIVE";
-                if (s) await updateDoc(doc(db, "sessione_corrente", match.alias), { state: s });
+                if (testo.includes("rianimato") || testo.includes("attivo")) s = "ACTIVE";
+                
+                if (s) {
+                    await updateDoc(doc(db, "sessione_corrente", match.alias), { state: s });
+                    document.getElementById('log').innerText += "\n[INFO] Sincronizzazione stato: " + s;
+                }
             }
         }
     </script>
