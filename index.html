@@ -35,6 +35,24 @@
     </div>
 
     <script type="module">
+        // --- FUNZIONE SEMPRE ACCESO (WAKE LOCK) ---
+let wakeLock = null;
+const requestWakeLock = async () => {
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    console.log('Schermo bloccato: SEMPRE ACCESO');
+  } catch (err) {
+    console.error(`${err.name}, ${err.message}`);
+  }
+};
+requestWakeLock();
+
+// --- FORZA SCHERMO INTERO AL TOCCO ---
+document.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+    }
+});
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
         import { getFirestore, doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
